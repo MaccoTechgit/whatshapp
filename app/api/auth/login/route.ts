@@ -31,7 +31,8 @@ export async function POST(request: Request) {
       user: { 
         name: user.name, 
         phoneNumber: user.phoneNumber,
-        chatId: user.chatId // Ye anonymous link ke kaam aayega
+        chatId: user.chatId, // Ye anonymous link ke kaam aayega
+        welcomeMessage: user.welcomeMessage || ''
       } 
     }, { status: 200 });
 

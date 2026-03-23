@@ -27,6 +27,12 @@ export default function WhatsAppWebFinal() {
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [reactionMenuId, setReactionMenuId] = useState<string | null>(null);
 
+  // Auto-Reply Modal state
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [welcomeMsgInput, setWelcomeMsgInput] = useState('');
+  const [autoReplies, setAutoReplies] = useState<{keyword: string, response: string}[]>([]);
+  const [isSavingWelcome, setIsSavingWelcome] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -187,6 +193,27 @@ export default function WhatsAppWebFinal() {
     fetch('/api/notify', { method: 'POST', body: JSON.stringify({ receiverId: activeChat.id }) });
   };
 
+  const handleOpenProfile = async () => {
+    setWelcomeMsgInput(user.welcomeMessage || '');
+    setAutoReplies(user.autoReplies || []); 
+    setShowProfileModal(true);
+    try {
+      const res = await fetch('/api/user/get-welcome', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: user.id })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWelcomeMsgInput(data.welcomeMessage || '');
+        setAutoReplies(data.autoReplies || []);
+        const updatedUser = { ...user, welcomeMessage: data.welcomeMessage, autoReplies: data.autoReplies };
+        setUser(updatedUser);
+        localStorage.setItem('whatsapp_user', JSON.stringify(updatedUser));
+      }
+    } catch (e) {}
+  };
+
   const cleanSearchTerm = searchTerm.replace(/\D/g, ''); 
   const isNewNumber = cleanSearchTerm.length === 10;
   const filteredChats = chatList.filter(chat => {
@@ -204,7 +231,7 @@ export default function WhatsAppWebFinal() {
       {/* 🟢 SIDEBAR */}
       <div className={`${activeChat ? 'hidden md:flex' : 'flex'} w-full md:w-[350px] lg:w-[400px] flex-col bg-white border-r border-neutral-300 h-full`}>
         <div className="h-16 px-3 sm:px-4 flex items-center justify-between bg-[#F0F2F5] shrink-0 border-b">
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 cursor-pointer hover:bg-neutral-200 p-1.5 rounded transition-colors" onClick={handleOpenProfile}>
             <div className="w-10 h-10 rounded-full bg-neutral-300 flex items-center justify-center shadow-sm shrink-0"><User className="text-white w-6 h-6"/></div>
             <div className="min-w-0">
               <p className="text-sm font-bold truncate">{user.name}</p>
@@ -403,6 +430,84 @@ export default function WhatsAppWebFinal() {
           </div>
         )}
       </div>
+
+      {/* 🟢 PROFILE / WELCOME MESSAGE MODAL */}
+      {showProfileModal && (
+        <div className="absolute inset-0 z-[200] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm relative shrink-0 overflow-y-auto">
+            <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 text-neutral-500 hover:text-black"><X className="w-5 h-5"/></button>
+            <h2 className="text-xl font-bold mb-4">Your Profile</h2>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-neutral-600 mb-1">Default Welcome Message</label>
+              <textarea 
+                value={welcomeMsgInput}
+                onChange={(e) => setWelcomeMsgInput(e.target.value)}
+                placeholder="Message sent on their first text..."
+                className="w-full border rounded-lg p-2 text-sm outline-none focus:border-[#25D366] resize-none h-16"
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-neutral-600 mb-2">Custom Keyword Replies</label>
+              <div className="max-h-52 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                {autoReplies.map((rule, idx) => (
+                  <div key={idx} className="flex gap-2 items-start bg-neutral-50 p-2 rounded border border-neutral-200">
+                    <div className="flex-1 space-y-2">
+                      <input 
+                        value={rule.keyword} 
+                        onChange={(e) => { const newArr = [...autoReplies]; newArr[idx].keyword = e.target.value; setAutoReplies(newArr); }}
+                        placeholder="Keyword (e.g., Price)" 
+                        className="w-full border p-1.5 text-[13px] rounded outline-none focus:border-[#00a884]"
+                      />
+                      <input 
+                        value={rule.response} 
+                        onChange={(e) => { const newArr = [...autoReplies]; newArr[idx].response = e.target.value; setAutoReplies(newArr); }}
+                        placeholder="Reply message" 
+                        className="w-full border p-1.5 text-[13px] rounded outline-none focus:border-[#00a884]"
+                      />
+                    </div>
+                    <button onClick={() => setAutoReplies(autoReplies.filter((_, i) => i !== idx))} className="text-red-500 p-1.5 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4"/></button>
+                  </div>
+                ))}
+              </div>
+              {autoReplies.length < 6 && (
+                <button onClick={() => setAutoReplies([...autoReplies, { keyword: '', response: '' }])} className="text-[#00a884] text-[13px] font-bold mt-2 hover:underline">
+                  + Add Keyword Rule
+                </button>
+              )}
+            </div>
+
+            <button 
+              disabled={isSavingWelcome}
+              onClick={async () => {
+                setIsSavingWelcome(true);
+                const validRules = autoReplies.filter(r => r.keyword.trim() && r.response.trim());
+                try {
+                  const res = await fetch('/api/user/update-welcome', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber: user.id, welcomeMessage: welcomeMsgInput, autoReplies: validRules })
+                  });
+                  if (res.ok) {
+                    const updatedUser = { ...user, welcomeMessage: welcomeMsgInput, autoReplies: validRules };
+                    setUser(updatedUser);
+                    localStorage.setItem('whatsapp_user', JSON.stringify(updatedUser));
+                    setShowProfileModal(false);
+                  } else {
+                    alert('Failed to update settings.');
+                  }
+                } catch (e) {
+                  alert('Error updating settings.');
+                }
+                setIsSavingWelcome(false);
+              }}
+              className="w-full bg-[#25D366] text-white font-bold py-2.5 rounded-lg hover:bg-[#1DA851] transition-colors disabled:opacity-50"
+            >
+              {isSavingWelcome ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

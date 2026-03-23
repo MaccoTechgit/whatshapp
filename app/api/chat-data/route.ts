@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import Message from '@/models/Message';
+import User from '@/models/User';
+import { emitter } from '@/lib/emitter';
 
 function normalize(id: string) {
   if (!id) return '';
@@ -15,9 +17,18 @@ export async function POST(req: Request) {
 
     // 1. SEND MESSAGE & REPLY
     if (body.action === 'send') {
+      const sender = normalize(body.senderId);
+      const receiver = normalize(body.receiverId);
+
+      // Check if this is the first message from sender to receiver
+      const previousMessageCount = await Message.countDocuments({
+        senderId: sender,
+        receiverId: receiver
+      });
+
       await Message.create({
-        senderId: normalize(body.senderId),
-        receiverId: normalize(body.receiverId),
+        senderId: sender,
+        receiverId: receiver,
         senderName: body.senderName,
         receiverName: body.receiverName,
         text: body.text,
@@ -28,6 +39,52 @@ export async function POST(req: Request) {
         replyToSender: body.replyToSender || '',
         replyToId: body.replyToId || ''
       });
+
+      // Auto-reply logic
+      const receiverUser = await User.findOne({ 
+        $or: [
+          { phoneNumber: { $regex: new RegExp(receiver + '$') } }, 
+          { chatId: receiver }
+        ] 
+      });
+
+      if (receiverUser) {
+        let replyToSend = "";
+        
+        // 1. Keyword match (happens on every message)
+        if (receiverUser.autoReplies && receiverUser.autoReplies.length > 0 && body.text) {
+          const incomingText = body.text.toLowerCase().trim();
+          const match = receiverUser.autoReplies.find((rule: any) => 
+            incomingText === rule.keyword.toLowerCase().trim() || incomingText.includes(rule.keyword.toLowerCase().trim())
+          );
+          if (match) replyToSend = match.response;
+        }
+
+        // 2. Default Welcome message (happens for ANY unmatched message)
+        if (!replyToSend && receiverUser.welcomeMessage) {
+          replyToSend = receiverUser.welcomeMessage;
+        }
+
+        if (replyToSend) {
+          await Message.create({
+            senderId: receiver,
+            receiverId: sender,
+            senderName: receiverUser.name,
+            receiverName: body.senderName,
+            text: replyToSend,
+            type: 'text',
+            imageUrl: null,
+            status: 'delivered',
+            replyToText: '', 
+            replyToSender: '',
+            replyToId: ''
+          });
+
+          // Notify the sender that they received an auto-reply
+          emitter.emit('update_received', sender);
+        }
+      }
+
       return NextResponse.json({ success: true });
     }
 

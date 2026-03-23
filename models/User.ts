@@ -4,6 +4,8 @@ const UserSchema = new Schema({
   phoneNumber: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   name: { type: String, required: true },
+  welcomeMessage: { type: String, default: "" },
+  autoReplies: { type: [{ keyword: String, response: String }], default: [] },
   // 🔴 NAYA: Direct chat link ke liye unique ID
   chatId: { type: String, unique: true, required: true } 
 }, { 
