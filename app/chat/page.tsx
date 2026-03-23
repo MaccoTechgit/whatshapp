@@ -33,8 +33,18 @@ export default function WhatsAppWebFinal() {
   const [autoReplies, setAutoReplies] = useState<{keyword: string, response: string}[]>([]);
   const [isSavingWelcome, setIsSavingWelcome] = useState(false);
 
+  // Mobile Viewport Fix
+  const [viewportHeight, setViewportHeight] = useState('100dvh');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Gesture Controls
+  const touchStartX = useRef<number>(0);
+  const touchStartY = useRef<number>(0);
+  const isPressing = useRef<boolean>(false);
+  const pressTimer1 = useRef<any>(null);
+  const pressTimer2 = useRef<any>(null);
 
   const activeChatRef = useRef(activeChat);
   const userRef = useRef(user);
@@ -53,6 +63,13 @@ export default function WhatsAppWebFinal() {
       const pending = localStorage.getItem('pending_chat');
       if (pending) { handleChatClick(JSON.parse(pending)); localStorage.removeItem('pending_chat'); }
     } else router.replace('/login');
+
+    if (typeof window !== 'undefined' && window.visualViewport) {
+      const updateVH = () => setViewportHeight(`${window.visualViewport?.height}px`);
+      window.visualViewport.addEventListener('resize', updateVH);
+      updateVH();
+      return () => window.visualViewport?.removeEventListener('resize', updateVH);
+    }
   }, [router]);
 
   const triggerSync = async () => {
@@ -223,10 +240,59 @@ export default function WhatsAppWebFinal() {
   });
   const exactMatchExists = chatList.some(c => c.id === cleanSearchTerm);
 
+  // --- Mobile Gestures Logic ---
+  const handleTouchStart = (e: React.TouchEvent, msg: any) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isPressing.current = true;
+
+    pressTimer1.current = setTimeout(() => {
+      if (isPressing.current) {
+        setReactionMenuId(msg.id);
+        setMenuOpenId(null);
+        if (navigator.vibrate) navigator.vibrate(50);
+      }
+    }, 1000);
+
+    pressTimer2.current = setTimeout(() => {
+      if (isPressing.current) {
+        setReactionMenuId(null);
+        setMenuOpenId(msg.id);
+        if (navigator.vibrate) navigator.vibrate(100);
+      }
+    }, 2000);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isPressing.current) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      clearTimeout(pressTimer1.current);
+      clearTimeout(pressTimer2.current);
+      isPressing.current = false;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent, msg: any) => {
+    clearTimeout(pressTimer1.current);
+    clearTimeout(pressTimer2.current);
+
+    if (isPressing.current) {
+      isPressing.current = false;
+      const dx = e.changedTouches[0].clientX - touchStartX.current;
+      const dy = e.changedTouches[0].clientY - touchStartY.current;
+      if (Math.abs(dx) > 40 && Math.abs(dy) < 30) {
+        setReplyingTo(msg);
+        if (navigator.vibrate) navigator.vibrate(30);
+      }
+    }
+  };
+
   if (!user) return null;
 
   return (
-    <main className="flex h-[100dvh] bg-[#F0F2F5] overflow-hidden font-sans antialiased text-[#111b21]" onClick={() => { setMenuOpenId(null); setReactionMenuId(null); }}>
+    <main className="flex bg-[#F0F2F5] overflow-hidden font-sans antialiased text-[#111b21]" style={{ height: viewportHeight }} onClick={() => { setMenuOpenId(null); setReactionMenuId(null); }}>
       
       {/* 🟢 SIDEBAR */}
       <div className={`${activeChat ? 'hidden md:flex' : 'flex'} w-full md:w-[350px] lg:w-[400px] flex-col bg-white border-r border-neutral-300 h-full`}>
@@ -308,7 +374,14 @@ export default function WhatsAppWebFinal() {
               {messages.map((msg) => {
                 const hasReactions = msg.reactions && msg.reactions.length > 0 && !msg.isDeleted;
                 return (
-                  <div key={msg.id} id={`msg-${msg.id}`} className={`flex ${msg.isSentByMe ? 'justify-end' : 'justify-start'} group relative transition-all w-full ${hasReactions ? 'mb-4' : 'mb-1'}`}>
+                  <div 
+                    key={msg.id} 
+                    id={`msg-${msg.id}`} 
+                    className={`flex ${msg.isSentByMe ? 'justify-end' : 'justify-start'} group relative transition-all w-full ${hasReactions ? 'mb-4' : 'mb-1'}`}
+                    onTouchStart={(e) => handleTouchStart(e, msg)}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={(e) => handleTouchEnd(e, msg)}
+                  >
                     
                     <div className={`max-w-[85%] sm:max-w-[75%] md:max-w-[65%] rounded-lg px-2.5 sm:px-3 py-1.5 shadow-sm relative break-words ${msg.isSentByMe ? 'bg-[#d9fdd3] rounded-tr-none' : 'bg-white rounded-tl-none'} ${msg.isDeleted ? 'bg-transparent border border-neutral-300 shadow-none' : ''}`}>
                       
