@@ -6,8 +6,8 @@ import { Send, MessageCircle } from 'lucide-react';
 
 export default function DirectChatEntry() {
   const params = useParams(); 
-  const rawId = decodeURIComponent(params.id as string);
-  const ownerPhoneNumber = rawId.replace(/\D/g, '').slice(-10); 
+  const rawId = params?.id ? decodeURIComponent(params.id as string) : '';
+  const ownerPhoneNumber = rawId ? rawId.replace(/\D/g, '').slice(-10) : ''; 
   const [guestPhone, setGuestPhone] = useState('');
   const router = useRouter();
 

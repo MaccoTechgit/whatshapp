@@ -5,9 +5,9 @@ import { useRouter, useParams } from 'next/navigation';
 
 export default function AnonChatAutoEntry() {
   const params = useParams(); 
-  const rawId = decodeURIComponent(params.id as string);
+  const rawId = params?.id ? decodeURIComponent(params.id as string) : '';
   // Agar phone number hai toh 10 digit nikalo, nahi toh Guest ID hi rakho
-  const ownerId = rawId.replace(/\D/g, '').slice(-10) || rawId; 
+  const ownerId = rawId ? (rawId.replace(/\D/g, '').slice(-10) || rawId) : ''; 
   
   const router = useRouter();
 

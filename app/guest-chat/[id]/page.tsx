@@ -6,8 +6,8 @@ import { Send, User, LogOut, Check, Phone } from 'lucide-react';
 
 export default function GuestPanel() {
   const params = useParams();
-  const rawId = decodeURIComponent(params.id as string);
-  const ownerPhoneNumber = rawId.replace(/\D/g, '').slice(-10); 
+  const rawId = params?.id ? decodeURIComponent(params.id as string) : '';
+  const ownerPhoneNumber = rawId ? rawId.replace(/\D/g, '').slice(-10) : ''; 
   const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(true);
